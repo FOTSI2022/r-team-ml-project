@@ -1,0 +1,1782 @@
+---
+title: "Projet"
+author: "Equipe 9"
+date: "2024-03-11"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE) 
+```
+
+# Liste des packages utiles
+```{r}
+library(MASS) 
+library(readxl) #lecture du fichier
+library(tidyverse) #graphique et traitement base de données
+library(caret) 
+library(ggplot2) #graphique
+library(FNN) #regression KNN
+library(mice) #imputation des données manquates par la méthode mice
+library(questionr) #relation entre variable cible et var categorielles
+library(FactoMineR) #ACP
+library(e1071) #validation croisee
+library(klaR)
+library(ROCR)
+library(class)
+library(kknn)
+theme_set(theme_classic())
+```
+
+
+# Importation des données
+```{r}
+##setwd('C:\\Perso\\GIT_DOSSIER_2\\ELVIS\\ETUDES CANADA\\Laval AD\\Hiver 2024\\Methodes analyse donnees\\projet etape 2\\travail 6 avril')
+
+Dataset <- read_excel("Dataset.xlsx")
+#View(Dataset)
+```
+
+
+# -----------Analyse effectuée pour le rapport 1 (description des variables)---
+
+# Factorisation des variables qualitatives
+```{r}
+Dataset[c(2,4,6,7,8,9)] <- lapply(Dataset[c(2,4,6,7,8,9)], as.factor)
+```
+
+
+```{r}
+#base sans les donnees manquantes
+churn_0 <- na.omit(Dataset) #7081 sans données manquantes
+```
+
+
+
+#Analyse descriptives
+
+```{r}
+ #base des variables categorielles pour tableau de synthese
+base_cate <- churn_0[c(2,4,6,7,8,9)]
+
+#Tableau de fréquence des variables qualitatives
+gather(base_cate, "var", "value") %>%
+  count(var, value) %>%
+  group_by(var) %>%             
+  mutate(prop = round(prop.table(n),4)*100)
+
+#Distribution des variables quantitatives
+str(churn_0)
+hist(churn_0$Customer_Age,breaks = 20 )
+hist(churn_0$Dependent_count,breaks = 5 )
+hist(churn_0$Months_on_book,breaks = 5 )
+hist(churn_0$Total_Relationship_Count,breaks = 5 )
+hist(churn_0$Months_Inactive_12_mon,breaks = 5 )
+hist(churn_0$Contacts_Count_12_mon,breaks = 5 )
+hist(churn_0$Credit_Limit,breaks = 100 )
+hist(churn_0$Avg_Open_To_Buy ,breaks = 100 )
+hist(churn_0$Total_Amt_Chng_Q4_Q1 ,breaks = 100 )
+hist(churn_0$Avg_Utilization_Ratio ,breaks = 100 )
+hist(churn_0$Total_Trans_Amt ,breaks = 100 )
+hist(churn_0$Total_Ct_Chng_Q4_Q1 ,breaks = 10 )
+hist(churn_0$Total_Trans_Ct,breaks = 5)
+hist(churn_0$Total_Revolving_Bal ,breaks = 100 )
+
+#Correlation entre les variables quantitatives
+df = churn_0 
+
+df<-df[,c("Customer_Age","Dependent_count","Months_on_book","Total_Relationship_Count","Months_Inactive_12_mon","Contacts_Count_12_mon","Credit_Limit","Total_Revolving_Bal","Avg_Open_To_Buy","Total_Amt_Chng_Q4_Q1","Total_Trans_Amt","Total_Trans_Ct","Total_Ct_Chng_Q4_Q1","Avg_Utilization_Ratio") ]
+print(df)
+#pairs(churn_0)
+cor_df <- round(cor(df), 2)
+melted_cormat <- melt(cor_df)
+print(melted_cormat)
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+geom_tile() +
+  geom_text(aes(Var2, Var1, label = value), size = 2) +
+  scale_fill_gradient2(low = "blue", high = "red",
+                       limit = c(-1,1), name="Correlation") +
+  theme(axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        panel.background = element_blank())+
+  theme(axis.text.x = element_text(angle=90, hjust=1))
+
+#Relation entre la variable cible et les variables categorielles
+base_cate <- as.data.frame(base_cate)
+for (j in 2:6){
+  tab <- table(base_cate[,j],base_cate$Attrition_Flag)
+  tab <- rbind(tab)
+}
+print(lprop(tab))
+
+tab <- table(base_cate[,1],base_cate$Attrition_Flag)
+#boxplots
+
+par(mfrow=c(2,2))
+ ggplot(churn_0,aes(x = Attrition_Flag, y = Customer_Age))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+ 
+  ggplot(churn_0,aes(x = Attrition_Flag, y = Dependent_count))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+  
+  ggplot(churn_0,aes(x = Attrition_Flag, y = Months_on_book))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+  
+ ggplot(churn_0,aes(x = Attrition_Flag, y = Total_Relationship_Count))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+ 
+ ggplot(churn_0,aes(x = Attrition_Flag, y = Months_Inactive_12_mon))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+ 
+ggplot(churn_0,aes(x = Attrition_Flag, y = Contacts_Count_12_mon))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+
+ggplot(churn_0,aes(x = Attrition_Flag, y = Credit_Limit))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+
+ggplot(churn_0,aes(x = Attrition_Flag, y = Total_Revolving_Bal))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+
+ggplot(churn_0,aes(x = Attrition_Flag, y = Avg_Open_To_Buy))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+
+ggplot(churn_0,aes(x = Attrition_Flag, y = Total_Amt_Chng_Q4_Q1))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+
+ggplot(churn_0,aes(x = Attrition_Flag, y = Total_Trans_Amt))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+
+ggplot(churn_0,aes(x = Attrition_Flag, y = Total_Trans_Ct))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+
+ggplot(churn_0,aes(x = Attrition_Flag, y = Total_Ct_Chng_Q4_Q1))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+
+ggplot(churn_0,aes(x = Attrition_Flag, y = Avg_Utilization_Ratio))+
+  geom_point()+ scale_y_continuous()+
+  theme()+
+  geom_boxplot()+
+  stat_summary(fun.min = min,
+    fun.max = max,
+    fun = median)
+
+```
+
+```{r}
+# Charger la librairie ggplot2
+library(ggplot2)
+
+# Définir les couleurs pour les graphiques
+my_colors <- c("#0072B2", "#009E73", "#D55E00", "#CC79A7")
+
+# Créer et afficher les graphiques un par un
+for (var in c("Customer_Age", "Dependent_count","Total_Relationship_Count", "Months_on_book","Months_Inactive_12_mon","Contacts_Count_12_mon","Total_Relationship_Count","Avg_Open_To_Buy","Credit_Limit","Total_Amt_Chng_Q4_Q1","Total_Ct_Chng_Q4_Q1","Avg_Utilization_Ratio","Total_Trans_Amt","Total_Trans_Ct" )) {
+  # Créer le graphique
+  p <- ggplot(Dataset, aes_string(x = "Attrition_Flag", y = var, fill = "Attrition_Flag")) +
+    geom_point(color = my_colors[1]) +
+    geom_boxplot(alpha = 0.5) +
+    stat_summary(fun.min = min, fun.max = max, fun = median, geom = "point", color = my_colors[3], size = 3) +
+    theme_minimal() +
+    labs(title = paste("Boxplot avec la variable '", var," '"),
+         x = "Attrition Flag",
+         y = var,
+         fill = "Attrition Flag") +
+    theme(plot.title = element_text(face = "bold", hjust = 0.5),
+          axis.title = element_text(face = "bold"),
+          legend.title = element_text(face = "bold"),
+          legend.text = element_text(face = "bold"))
+
+  # Afficher le graphique dans une fenêtre séparée
+  print(p)
+  ggsave(filename = paste0(var, ".png"), plot = p)
+}
+
+```
+
+
+#Analyse en composantes principales
+```{r}
+#On extrait les variables quantitatives
+dat <-churn_0
+dat2<-dat[, c(3:21)]
+
+#Réalisation ACP avec PCA avec les variables cat comme variables supplémentaires
+nbre_comp <- 14 
+out = PCA(dat[, c(3,5,10:21)], ncp = nbre_comp,graph = T )
+out$eig
+
+dimdesc(out, axes=c(1,2))
+
+
+```
+```{r}
+dat.acp = princomp(churn_0[, c(3,5,10:21)],cor = T)
+names(dat.acp) #Voir help(princomp)
+
+plot(dat.acp)
+
+# valeurs propres
+dat.vp = dat.acp$sdev^2
+print(dat.vp)
+
+# vecteurs propres
+dat.vecp = loadings(dat.acp) 
+print(dat.vecp) #par défaut, masque les plus petites valeurs
+print(dat.vecp, cutoff = 0)
+
+# proportion de variance expliquée par chaque valeur propre
+round(dat.vp/sum(dat.vp),2)
+
+# On peut se faire un petit résumé
+round( cbind(ValeurPropre = dat.vp,PropVariance = dat.vp/sum(dat.vp), PropVarianceCumulee = cumsum(dat.vp)/sum(dat.vp)), 2)
+
+#Ou utiliser la fonction incluse
+summary(dat.acp)
+
+# Graphique des points dans les deux premières composantes principales
+plot( dat.acp$scores[,1],dat.acp$scores[,2], pch = 16, xlab = "Première CP", ylab = "Deuxième CP", las = 1)
+abline(h=0,v=0) # ligne en x=0 et y=0
+
+#On pourrait aussi imprimer les noms des joueurs
+plot(dat.acp$scores[,1],dat.acp$scores[,2],type="n",
+      xlab="Première CP",ylab="Deuxième CP", las = 1) # graphique
+abline(h=0,v=0) 
+text(dat.acp$scores[,1],dat.acp$scores[,2],labels=row.names(dat),cex=0.5) 
+
+#On pourrait aussi simplement mettre l'index de l'observation
+plot(dat.acp$scores[,1],dat.acp$scores[,2],type="n",
+      xlab="Première CP",ylab="Deuxième CP", las = 1) # graphique
+abline(h=0,v=0) 
+text(dat.acp$scores[,1],dat.acp$scores[,2],
+      labels=1:322,cex=0.5) 
+
+# graphiques des éboulis
+plot(dat.acp,type="l")
+
+```
+
+
+
+
+
+
+#Transformation des valeurs manquantes dans la base
+```{r}
+# Recodage des variables (Unknown en NA)
+
+Dataset$Education_Level<-ifelse(Dataset$Education_Level=="Unknown","",Dataset$Education_Level)
+is.na(Dataset$Education_Level)<-Dataset$Education_Level==""
+Dataset$Marital_Status<-ifelse(Dataset$Marital_Status=="Unknown","",Dataset$Marital_Status)
+is.na(Dataset$Marital_Status)<-Dataset$Marital_Status==""
+Dataset$Income_Category<-ifelse(Dataset$Income_Category=="Unknown","",Dataset$Income_Category)
+is.na(Dataset$Income_Category)<-Dataset$Income_Category==""
+```
+
+
+
+
+#----------  --Debut du rapport 2----------------------------------------------
+
+## Séparation en jeu de données d'entrainement (75%) et jeu de données test (25%)
+```{r}
+set.seed(123) 
+training.individuals <- Dataset$Attrition_Flag %>% 
+			createDataPartition(p = 0.75, list = FALSE) 
+train.data <- Dataset[training.individuals, ] 
+train.data_2<- data.frame(train.data)
+test_1 <- Dataset[-training.individuals, ]
+test_1_2<- data.frame(test_1)
+
+
+#Tableau recapitulatif des performances 
+tab_rec = matrix(data = "", nrow = 5 , ncol = 3)
+row.names(tab_rec)= c("k-nn","log","k-nn-acp","LDA","NaiveBayes")
+colnames(tab_rec) = c( "acc","Sens","Spec")
+```
+
+
+## Estimation des modèles sans valeurs manquantes
+
+### Regression KNN
+
+```{r}
+# Supprimer les lignes avec des valeurs manquantes
+train.data_supp <- na.omit(train.data)
+test_1_supp <- na.omit(test_1)
+
+
+# Puisque le methode KNN ne prend pas en compte les valeurs non numériques :
+# car basé sur des distances: on pourrait les exclure ou transformer en numérique.
+
+train.data_supp_num<- train.data_supp[, -c(1,4,6,7,8,9)]
+test_1_supp_num<- test_1_supp[, -c(1,4,6,7,8,9)]
+
+## Valifation croisée pour trouver le meilleur k
+
+# Définir la grille de recherche de k
+k_values <- seq(1, 20, by = 2)
+
+# Effectuer la validation croisée pour trouver le meilleur k
+cv_kknn0 <- train.kknn(train.data_supp_num$Attrition_Flag ~ ., data = train.data_supp_num, kmax = max(k_values), kernel = "rectangular", kcv = 10)
+## par defaut c'est la distance de Minkowski 
+
+# Afficher les résultats de la validation croisée
+print(cv_kknn0)
+# le meilleur k est ainsi 6
+
+# On reconvertit 
+train.data_supp_num <- data.frame(lapply(train.data_supp_num, function(x) if(is.factor(x)) as.numeric(x) else x))
+test_1_supp_num <- data.frame(lapply(test_1_supp_num, function(x) if(is.factor(x)) as.numeric(x) else x))
+
+# Appliquons le Knn avec k=6 et évaluons la performance avec les données test
+knn_model0 <- knn(train = train.data_supp_num, test = test_1_supp_num, cl = train.data_supp_num$Attrition_Flag, k = 6)
+
+# Créer une matrice de confusion en spécifiant la classe positive
+conf_matrix <- confusionMatrix(factor(knn_model0, levels = c(1, 2)), 
+                                factor(test_1_supp_num$Attrition_Flag, levels = c(1, 2)), 
+                                positive = "1")
+
+# Afficher la matrice de confusion modifiée
+print(conf_matrix)
+```
+
+### Classification KNN, avec reduction de la dimmension 
+Ici nous effectuons une reduction de la dimmension à l'aide de l'analyse en composante principale pour ensuite effectuer la classification kNN.
+
+```{r}
+# Sélectionner les variables numériques à inclure dans l'ACP
+variables_num <- train.data_supp_num[, -which(names(train.data_supp_num) %in% c("Attrition_Flag"))]
+
+# Effectuer une ACP sur les variables numériques
+pca_model <- prcomp(variables_num, scale. = TRUE)
+
+# Obtenir les composantes principales pour les données d'entraînement et de test
+train_data_pca <- predict(pca_model, variables_num)
+test_data_pca <- predict(pca_model, test_1_supp_num[, -which(names(test_1_supp_num) %in% c("Attrition_Flag"))])
+```
+
+Nous allons maintenant choisir le nombre de composantes principales à retenir pour la suite de notre analyse. Pour ce faire, nous allons dresser l'histogramme des valeurs propres générées par l'analyse en composantes principales (PCA) et identifier le point à partir duquel l'inertie expliquée commence à diminuer de manière significative.
+
+```{r}
+# Afficher l'histogramme des valeurs propres
+barplot(summary(pca_model)$importance[2,], 
+        names.arg = 1:length(summary(pca_model)$importance[2,]), 
+        xlab = "Nombre de composantes", 
+        ylab = "Valeurs propres",
+        main = "Histogramme des valeurs propres")
+# Calculer les coordonnées x au centre de chaque barre
+bar_center <- barplot(summary(pca_model)$importance[2,], 
+                       names.arg = 1:length(summary(pca_model)$importance[2,]), 
+                       xlab = "Nombre de composantes", 
+                       ylab = "Valeurs propres",
+                       main = "Histogramme des valeurs propres",
+                       col = "darkblue")
+
+# Ajouter les pourcentages d'inertie centrés au-dessus de chaque barre
+text(x = bar_center, 
+     y = summary(pca_model)$importance[2,] + 0.02, 
+     labels = paste0(round(summary(pca_model)$importance[2,] * 100, 1), "%"),
+     pos = 3, cex = 0.7)
+
+```
+Suite à l'analyse de l'histogramme, nous avons choisi de conserver les deux (02) premieres composantes etant donné qu'à partir de la 2 eme composante, l'inertie expliquée commence à diminuer de manière significative.
+
+Nous obtenons les données d'entrainement et de test suivantes:
+
+```{r}
+# Sélectionner les deux premières composantes principales
+train_data_pca_selected <- train_data_pca[, 1:2]
+test_data_pca_selected <- test_data_pca[, 1:2]
+
+# Ajouter la variable d'intérêt à chaque jeu de données en première position
+train_data_pca_selected <- cbind(Attrition_Flag = train.data_supp_num$Attrition_Flag, train_data_pca_selected)
+test_data_pca_selected <- cbind(Attrition_Flag = test_1_supp_num$Attrition_Flag, test_data_pca_selected)
+```
+
+Maintenant nous effectuons une validation croisée pour choisir le nombre de voisin optimal (k_opt) en tenant en compte l'ACP.
+
+```{r}
+# Définir la grille de recherche de k
+k_values <- seq(1, 20, by = 2)
+
+# Effectuer la validation croisée pour trouver le meilleur k
+k_opt <- train.kknn(train.data_supp_num$Attrition_Flag ~ ., data = data.frame(train_data_pca), kmax = max(k_values), kernel = "rectangular", kcv = 10)
+
+# Afficher les résultats de la validation croisée
+print(k_opt)
+```
+Le meilleur k trouvé par la validation croisée pour le modèle k-NN avec ACP est 16.
+
+Après avoir effectué une Analyse en Composantes Principales (ACP) sur vos données, nous utilisons les composantes principales obtenues comme variables d'entrée pour effectuer une classification k-NN.
+
+```{r}
+# Convertir les données en data frames
+train_data_pca_selected <- data.frame(train_data_pca_selected) 
+test_data_pca_selected <- data.frame(test_data_pca_selected)
+                                     
+# Entraîner le modèle k-NN avec k=9
+knn_model <- knn(train = train_data_pca_selected[, -1],  # Exclure la variable d'intérêt
+                  test = test_data_pca_selected[, -1],    # Exclure la variable d'intérêt
+                  cl = train_data_pca_selected$Attrition_Flag,   # Variable d'intérêt
+                  k = 16)
+
+```
+
+Evaluation de la performance du modèle
+
+```{r}
+# Convertir les données en facteurs avec les mêmes niveaux
+knn_model_factor <- as.factor(knn_model)
+test_data_factor <- as.factor(test_data_pca_selected$Attrition_Flag)
+
+# Créer une matrice de confusion en spécifiant la classe positive
+conf_matrix <- confusionMatrix(factor(knn_model, levels = c(1, 2)), 
+                                factor(test_data_pca_selected$Attrition_Flag, levels = c(1, 2)), 
+                                positive = "1")
+
+# Afficher la matrice de confusion modifiée
+print(conf_matrix)
+
+```
+L'analyse que nous avons réalisée mettent en lumière l'impact de la réduction de la dimension sur la performance des modèles de classification kNN. En réduisant l'espace des variables à deux dimensions à l'aide de l'analyse en composantes principales (ACP), nous avons observé une légère baisse de la performance du modèle kNN, avec une précision de 85,06% , par rapport à la classification kNN sans réduction de la dimension, qui affichait une précision de 88,95% . Cette diminution de performance suggère que la réduction de la dimension a pu entraîner une perte d'informations importantes pour la classification.
+
+
+
+### Naives bayes
+En regardant les distributions des attributs, on constate que l'hypothèse de normalité n'est pas vérifiée pour la grande majorité des attributs donc nous utiliserons l'estimateur par noyau de densité.
+
+```{r}
+# Utilisation des cas complet pour fitter le model
+
+train_complet <- train.data[complete.cases(train.data),]
+                                           
+test_complet <- test_1[complete.cases(test_1),]
+
+# Modèle
+
+model_by_comp <- NaiveBayes(Attrition_Flag~. , data = train_complet[-c(1,3,5,10,16)], usekernel = T)
+out_by_comp = predict(model_by_comp, test_complet[-c(1,3,5,10,16)])
+#Calcul des métriques
+
+#matrice de confusion
+mat = table(out_by_comp$class,test_complet$Attrition_Flag)
+#Calcul des métriques
+acc = (mat[1,1]+mat[2,2]) / (mat[1,1]+mat[2,2]+mat[1,2]+mat[2,1]) * 100
+
+
+sens = mat[1,1] / (mat[1,1]+mat[1,2]) * 100
+
+spec =  mat[2,2] / (mat[2,2]+mat[2,1]) * 100
+metric = c(acc,sens,spec)
+#regroupement des metriques
+out_comp = matrix( metric, nrow = 1, byrow = T)
+out_comp
+
+```
+
+
+### Regression logistique
+
+```{r}
+# Estimate preprocessing parameters 
+#preproc.parameter <- train.data %>% preProcess(method = c("center", "scale")) 
+
+# Transform the data using the estimated parameters 
+#train.transform <- preproc.parameter %>% predict(train.data) 
+#test.transform <- preproc.parameter %>% predict(test_1) 
+
+# Utilisation des cas complet pour fitter le model
+
+train_complet <- train.data[complete.cases(train.data),]
+                                           
+test_complet <- test_1[complete.cases(test_1),]                                           
+#-c(1,3,4,5,6,7,8,9,10,16)
+# Fit the model 3,16,5 et 10
+#model <- lda(Attrition_Flag~., data = train_complet[-c(1,3,4,5,6,7,8,9,10,16)]) 
+
+# Sélection des variables à inclure dans le modèle: des test de khi-deux et d'analyse de la variance ont permis d'exclure certaines variables qui ne sauraient expliquer la variable d'intêret
+
+# Modèle incluant les var qual
+model_qual <- lda(Attrition_Flag~. , data = train_complet[-c(1,3,5,10,16)]) 
+model_qual
+# Prediction
+predictions <- model_qual %>% predict(test_complet[-c(1,3,5,10,16)]) 
+
+
+
+# Make predictions 
+#predictions <- model %>% predict(test_complet[-c(1,3,4,5,6,7,8,9,10,16)]) 
+
+# Résultat
+
+#model
+# Model accuracy 
+mean(predictions$class==test_complet$Attrition_Flag) 
+
+# Matrice de confusion
+table(predictions$class,test_complet$Attrition_Flag)
+
+# Calcul de la sensibilité
+1445/(98+1444)*100
+
+#calcul de la spécificité
+175/(175+69)*100
+
+```
+
+On constate que le taux de bonne classification de notre modèle est de 90,65%
+
+
+## Estimation des modèles après imputation des valeurs par le mode ou moyenne
+
+### Imputation
+
+```{r}
+# Ajustement du modéle en utilisant toutes les données avec imputation
+
+# On impute les var manquantes par le mode (var qual)
+
+#Détermination des modes
+
+Mode = function(x){
+  ux <-na.omit(unique(x))
+  tab<- tabulate(match(x,ux)) ; ux[tab == max(tab)]
+}
+
+Mode(train.data$Education_Level)
+Mode(train.data$Marital_Status)
+Mode(train.data$Income_Category)
+# Imputation dans la base de données entrainement
+train.data$Education_Level[is.na(train.data$Education_Level)]<-Mode(train.data$Education_Level)
+train.data$Marital_Status[is.na(train.data$Marital_Status)]<-Mode(train.data$Marital_Status)
+train.data$Income_Category[is.na(train.data$Income_Category)]<-Mode(train.data$Income_Category)
+# Imputation dans la base de données test
+
+test_1$Education_Level[is.na(test_1$Education_Level)]<-Mode(test_1$Education_Level)
+test_1$Marital_Status[is.na(test_1$Marital_Status)]<-Mode(test_1$Marital_Status)
+test_1$Income_Category[is.na(test_1$Income_Category)]<-Mode(test_1$Income_Category)
+
+```
+
+
+### Knn sur la base imputée par la moyenne
+
+```{r}
+# Effectuer la validation croisée pour trouver le meilleur k
+cv_kknn2 <- train.kknn(train.data$Attrition_Flag ~ ., data = train.data, kmax = max(k_values), kernel = "rectangular", kcv = 10)
+## par defaut c'est la distance de Minkowski 
+print(cv_kknn2)
+
+## le nombre de k choisi est 12
+
+# Convertir d'abord les facteurs en numériques
+train.data <- data.frame(lapply(train.data, function(x) if(is.factor(x)) as.numeric(x) else x))
+test_1 <- data.frame(lapply(test_1, function(x) if(is.factor(x)) as.numeric(x) else x))
+
+# Appliquons le Knn avec k=12 et évaluons la performance
+knn_model2 <- knn(train = train.data, test = test_1, cl = train.data$Attrition_Flag, k = 12)
+
+
+# Évaluer les performances du modèle
+accuracy2 <- mean(knn_model2 == test_1$Attrition_Flag)
+print(paste("Précision du modèle KNN avec k=12 sur les données de test:", accuracy2))
+
+# Créer une matrice de confusion en spécifiant la classe positive
+conf_matrix2 <- confusionMatrix(factor(knn_model2, levels = c(1, 2)), 
+                                factor(test_1$Attrition_Flag, levels = c(1, 2)), 
+                                positive = "1")
+
+# Afficher la matrice de confusion modifiée
+print(conf_matrix2)
+
+
+```
+
+
+### kNN avec reduction de la dimmension sur base imputée
+
+Analyse en composante principale
+```{r}
+train.data_num1<- train.data[, -c(1,4,6,7,8,9)]
+test_1_num1<- test_1[, -c(1,4,6,7,8,9)]
+
+# Sélectionner les variables numériques à inclure dans l'ACP
+variables_num1 <- train.data_num1[, -which(names(train.data_num1) %in% c("Attrition_Flag"))]
+
+# Effectuer une ACP sur les variables numériques
+pca_model1 <- prcomp(variables_num1, scale. = TRUE)
+
+# Obtenir les composantes principales pour les données d'entraînement et de test
+train_data_pca1 <- predict(pca_model1, variables_num1)
+test_data_pca1 <- predict(pca_model1, test_1_num1[, -which(names(test_1_num1) %in% c("Attrition_Flag"))])
+```
+
+Choix des axes factoriels
+
+```{r}
+# Afficher l'histogramme des valeurs propres
+barplot(summary(pca_model1)$importance[2,], 
+        names.arg = 1:length(summary(pca_model1)$importance[2,]), 
+        xlab = "Nombre de composantes", 
+        ylab = "Valeurs propres",
+        main = "Histogramme des valeurs propres")
+# Calculer les coordonnées x au centre de chaque barre
+bar_center <- barplot(summary(pca_model1)$importance[2,], 
+                       names.arg = 1:length(summary(pca_model1)$importance[2,]), 
+                       xlab = "Nombre de composantes", 
+                       ylab = "Valeurs propres",
+                       main = "Histogramme des valeurs propres",
+                       col = "darkblue")
+
+# Ajouter les pourcentages d'inertie centrés au-dessus de chaque barre
+text(x = bar_center, 
+     y = summary(pca_model1)$importance[2,] + 0.02, 
+     labels = paste0(round(summary(pca_model1)$importance[2,] * 100, 1), "%"),
+     pos = 3, cex = 0.7)
+
+```
+Nous choisissons les 2 premiers axes factoriels
+
+Nouvelle variables et donneés
+```{r}
+# Sélectionner les deux premières composantes principales
+train_data_pca_selected1 <- train_data_pca1[, 1:2]
+test_data_pca_selected1 <- test_data_pca1[, 1:2]
+
+# Ajouter la variable d'intérêt à chaque jeu de données en première position
+train_data_pca_selected1 <- cbind(Attrition_Flag = train.data_num1$Attrition_Flag, train_data_pca_selected1)
+test_data_pca_selected1 <- cbind(Attrition_Flag = test_1_num1$Attrition_Flag, test_data_pca_selected1)
+
+```
+
+Validation croisée
+```{r}
+# Définir la grille de recherche de k
+k_values <- seq(1, 20, by = 2)
+
+# Effectuer la validation croisée pour trouver le meilleur k
+k_opt2 <- train.kknn(train.data_num1$Attrition_Flag ~ ., data = data.frame(train_data_pca1), kmax = max(k_values), kernel = "rectangular", kcv = 10)
+
+# Afficher les résultats de la validation croisée
+print(k_opt2)
+```
+Ici le k  optimal est 11.
+
+
+modele kNN avec k=11
+```{r}
+# Convertir les données en data frames
+train_data_pca_selected1 <- data.frame(train_data_pca_selected1) 
+test_data_pca_selected1 <- data.frame(test_data_pca_selected1)
+                                     
+# Entraîner le modèle k-NN avec k=9
+knn_model1 <- knn(train = train_data_pca_selected1[, -1],  # Exclure la variable d'intérêt
+                  test = test_data_pca_selected1[, -1],    # Exclure la variable d'intérêt
+                  cl = train_data_pca_selected1$Attrition_Flag,   # Variable d'intérêt
+                  k = 11)
+
+```
+
+Evaluation de la performance du modèle kNN apres imputation
+
+```{r}
+# Convertir les données en facteurs avec les mêmes niveaux
+knn_model_factor1 <- as.factor(knn_model1)
+test_data_factor1 <- as.factor(test_data_pca_selected1$Attrition_Flag)
+
+# Créer une matrice de confusion en spécifiant la classe positive
+conf_matrix1 <- confusionMatrix(factor(knn_model1, levels = c(1, 2)), 
+                                factor(test_data_pca_selected1$Attrition_Flag, levels = c(1, 2)), 
+                                positive = "1")
+
+# Afficher la matrice de confusion modifiée
+print(conf_matrix1)
+```
+
+
+### Naives Bayes sur base imputee par la moy
+```{r warning=FALSE}
+# Modèle
+
+model_by_moy <- NaiveBayes(Attrition_Flag~. , data = train.data[-c(1,3,5,10,16)], usekernel = T)
+out_by_moy = predict(model_by_moy, test_1[-c(1,3,5,10,16)])
+#Calcul des métriques
+
+#matrice de confusion
+mat = table(out_by_moy$class,test_1$Attrition_Flag)
+#Calcul des métriques
+acc = (mat[1,1]+mat[2,2]) / (mat[1,1]+mat[2,2]+mat[1,2]+mat[2,1]) * 100
+
+
+sens = mat[1,1] / (mat[1,1]+mat[1,2]) * 100
+
+spec =  mat[2,2] / (mat[2,2]+mat[2,1]) * 100
+metric = c(acc,sens,spec)
+#regroupement des metriques
+out_moy = matrix( metric, nrow = 1, byrow = T)
+out_moy
+
+```
+
+
+### Modélisation LDA avec les données imputées
+
+```{r}
+model_comp <- lda(Attrition_Flag~., data = train.data[-c(1,3,5,10,16)]) 
+
+# Résultat
+
+model_comp
+
+# Imputation dans la base de données test puis prédiction
+test_1$Education_Level[is.na(test_1$Education_Level)]<-Mode(test_1$Education_Level)
+test_1$Marital_Status[is.na(test_1$Marital_Status)]<-Mode(test_1$Marital_Status)
+test_1$Income_Category[is.na(test_1$Income_Category)]<-Mode(test_1$Income_Category)
+# Make predictions 
+predictions <- model_comp %>% predict(test_1[-c(1,3,5,10,16)]) 
+
+# Model accuracy 
+mean(predictions$class==test_1$Attrition_Flag) 
+
+# Matrice de confusion
+table(predictions$class,test_1$Attrition_Flag)
+
+# Calcul de la sensibilité
+
+2037/(142+2037)*100
+
+# Calcul de la spécificité
+
+257/(264+88)*100
+```
+
+On note ici une légère hausse du taux de bonne classification du modèle qui est de 90,9% aprés imputation des données par le mode
+
+
+
+### Regression logistique avec les données imputées
+Dans cette partie, on va essayer de modéliser la variable d'intêret par une regression logistiques
+
+```{r}
+# Modele
+model_logit<-glm(Attrition_Flag~. , data = train_complet[-c(1,3,5,10,16)],family = binomial)
+
+# Résultats modèle
+summary(model_logit)
+
+# Prédiction
+prob <- model_logit %>% predict(test_complet[-c(1,3,5,10,16)] , type = "response") 
+predicted.class<- ifelse(prob>0.5, "Existing Customer","Attrited Customer")
+
+# Model accuracy 
+mean(predicted.class==test_complet$Attrition_Flag) 
+
+# Matrice de confusion
+table(predicted.class,test_complet$Attrition_Flag)
+
+
+
+```
+
+Comparativement à la méthode LDA sur les données complétes, on constate une légère baisse du taux de bonne classification  qui est de 90,21%
+
+```{r}
+# Regression logistique avec les données imputées
+
+model_logit_comp<-glm(Attrition_Flag~. , data = train.data[-c(1,3,5,10,16)],family = binomial)
+
+# Résultats modèle
+summary(model_logit_comp)
+
+# Prédiction
+prob <- model_logit_comp %>% predict(test_1[-c(1,3,5,10,16)] , type = "response") 
+predicted.class<- ifelse(prob>0.5, "Existing Customer","Attrited Customer")
+
+# Model accuracy 
+mean(predicted.class==test_1$Attrition_Flag) 
+
+# Matrice de confusion
+table(predicted.class,test_1$Attrition_Flag)
+
+```
+
+La regression logistique sur les données imputées ne donne presque pas de gain de précision (taux de bonne classification presque inchangé: 90,20%) et qui reste toujours inférieur par rapport à la méthode LDA (90,9%)
+
+
+## Estimation des modèles après imputation par la méthode mice
+
+### Imputation par la methode mice
+
+```{r}
+# Imputation par la méthode mice des variables qualitatives
+# Données d'entrainement
+m1<- mice(train.data_2)
+
+# Base imputée
+train.data_mice<-complete(m1,2)
+
+# Données test
+
+m2<- mice(test_1_2)
+
+# Base imputée
+
+test_1_mice<-complete(m2,2)
+
+```
+
+
+### Knn avec imputation par la méthode mice
+```{r}
+
+# Effectuer la validation croisée pour trouver le meilleur k
+cv_kknn3 <- train.kknn(train.data_mice$Attrition_Flag ~ ., data = train.data_mice, kmax = max(k_values), kernel = "rectangular", kcv = 10)
+## par defaut c'est la distance de Minkowski 
+print(cv_kknn3)
+
+## le nombre de k choisi est 9
+
+# Convertir d'abord les facteurs en numériques
+train.data_mice <- data.frame(lapply(train.data_mice, function(x) if(is.factor(x)) as.numeric(x) else x))
+test_1_mice <- data.frame(lapply(test_1_mice, function(x) if(is.factor(x)) as.numeric(x) else x))
+
+# Appliquons le Knn avec k=9 et évaluons la performance
+knn_model3 <- knn(train = train.data_mice, test = test_1_mice, cl = train.data_mice$Attrition_Flag, k = 9)
+
+
+# Évaluer les performances du modèle
+accuracy3 <- mean(knn_model == test_1_mice$Attrition_Flag)
+print(paste("Précision du modèle KNN avec k=10 sur les données de test:", accuracy3))
+
+# Créer une matrice de confusion en spécifiant la classe positive
+conf_matrix10 <- confusionMatrix(factor(knn_model3, levels = c(1, 2)), 
+                                factor(test_1_mice$Attrition_Flag, levels = c(1, 2)), 
+                                positive = "1")
+
+# Afficher la matrice de confusion modifiée
+print(conf_matrix10)
+```
+
+
+### KNN avec réduction de la dimmension sur base imputée par mice
+
+Analyse en composante principale
+```{r}
+train.data_num11<- train.data_mice[, -c(1,4,6,7,8,9)]
+test_1_num11<- test_1_mice[, -c(1,4,6,7,8,9)]
+
+# Sélectionner les variables numériques à inclure dans l'ACP
+variables_num11 <- train.data_num11[, -which(names(train.data_num11) %in% c("Attrition_Flag"))]
+
+# Effectuer une ACP sur les variables numériques
+pca_model11 <- prcomp(variables_num11, scale. = TRUE)
+
+# Obtenir les composantes principales pour les données d'entraînement et de test
+train_data_pca11 <- predict(pca_model11, variables_num11)
+test_data_pca11 <- predict(pca_model11, test_1_num11[, -which(names(test_1_num11) %in% c("Attrition_Flag"))])
+```
+
+Choix des axes factoriels
+
+```{r}
+# Afficher l'histogramme des valeurs propres
+barplot(summary(pca_model11)$importance[2,], 
+        names.arg = 1:length(summary(pca_model11)$importance[2,]), 
+        xlab = "Nombre de composantes", 
+        ylab = "Valeurs propres",
+        main = "Histogramme des valeurs propres")
+# Calculer les coordonnées x au centre de chaque barre
+bar_center <- barplot(summary(pca_model11)$importance[2,], 
+                       names.arg = 1:length(summary(pca_model11)$importance[2,]), 
+                       xlab = "Nombre de composantes", 
+                       ylab = "Valeurs propres",
+                       main = "Histogramme des valeurs propres",
+                       col = "darkblue")
+
+# Ajouter les pourcentages d'inertie centrés au-dessus de chaque barre
+text(x = bar_center, 
+     y = summary(pca_model11)$importance[2,] + 0.02, 
+     labels = paste0(round(summary(pca_model11)$importance[2,] * 100, 1), "%"),
+     pos = 3, cex = 0.7)
+
+```
+Nous choisissons les 2 premiers axes factoriels
+
+Nouvelle variables et donneés:
+```{r}
+# Sélectionner les deux premières composantes principales
+train_data_pca_selected11 <- train_data_pca11[, 1:2]
+test_data_pca_selected11 <- test_data_pca11[, 1:2]
+
+# Ajouter la variable d'intérêt à chaque jeu de données en première position
+train_data_pca_selected11 <- cbind(Attrition_Flag = train.data_num11$Attrition_Flag, train_data_pca_selected11)
+test_data_pca_selected11 <- cbind(Attrition_Flag = test_1_num11$Attrition_Flag, test_data_pca_selected11)
+
+```
+
+Validation croisée
+
+```{r}
+# Définir la grille de recherche de k
+k_values <- seq(1, 20, by = 2)
+
+# Effectuer la validation croisée pour trouver le meilleur k
+k_opt3 <- train.kknn(train.data_num11$Attrition_Flag ~ ., data = data.frame(train_data_pca11), kmax = max(k_values), kernel = "rectangular", kcv = 10)
+
+# Afficher les résultats de la validation croisée
+print(k_opt3)
+```
+
+Ici le k  optimal est 8.
+
+modele kNN avec k=8
+
+```{r}
+# Convertir les données en data frames
+train_data_pca_selected11 <- data.frame(train_data_pca_selected11) 
+test_data_pca_selected11 <- data.frame(test_data_pca_selected11)
+                                     
+# Entraîner le modèle k-NN avec k=8
+knn_model11 <- knn(train = train_data_pca_selected11[, -1],  # Exclure la variable d'intérêt
+                  test = test_data_pca_selected11[, -1],    # Exclure la variable d'intérêt
+                  cl = train_data_pca_selected11$Attrition_Flag,   # Variable d'intérêt
+                  k = 8)
+
+```
+
+Evaluation de la performance du modèle kNN apres imputation
+
+```{r}
+# Convertir les données en facteurs avec les mêmes niveaux
+knn_model_factor11 <- as.factor(knn_model11)
+test_data_factor11 <- as.factor(test_data_pca_selected11$Attrition_Flag)
+
+# Créer une matrice de confusion en spécifiant la classe positive
+conf_matrix11 <- confusionMatrix(factor(knn_model11, levels = c(0, 1)), 
+                                factor(test_data_pca_selected11$Attrition_Flag, levels = c(0, 1)), 
+                                positive = "1")
+
+# Afficher la matrice de confusion modifiée
+print(conf_matrix11)
+```
+
+
+
+### Naive sur base imputée par mice
+
+```{r warning=FALSE}
+# Modèle
+model_by_mice <- NaiveBayes(Attrition_Flag~. , data = train.data_mice[-c(1,3,5,10,16)], usekernel = T)
+out_by_mice = predict(model_by_mice, test_1_mice[-c(1,3,5,10,16)])
+#Calcul des métriques
+
+#matrice de confusion
+mat = table(out_by_mice$class,test_1_mice$Attrition_Flag)
+#Calcul des métriques
+acc = (mat[1,1]+mat[2,2]) / (mat[1,1]+mat[2,2]+mat[1,2]+mat[2,1]) * 100
+
+sens = mat[1,1] / (mat[1,1]+mat[1,2]) * 100
+
+spec =  mat[2,2] / (mat[2,2]+mat[2,1]) * 100
+metric = c(acc,sens,spec)
+#regroupement des metriques
+out = matrix( metric, nrow = 1, byrow = T)
+out = rbind(out_comp,out_moy,out)
+
+row.names(out)= c("baiyes_comp","baiyes_moy","baiyes_mice")
+colnames(out) = c( "acc","Sens","Spec")
+out
+
+#Ajout des perf au tableau recap
+
+tab_rec["NaiveBayes",]=out["baiyes_comp",]
+tab_rec
+
+```
+Le meilleur modèle est sans imputation.
+
+
+
+### Modélisation LDA avec les nouvelles base imputée par mice
+
+```{r}
+model_comp2 <- lda(Attrition_Flag~., data = train.data_mice[-c(1,3,5,10,16)]) 
+
+# Résultat
+
+model_comp2
+
+# Make predictions 
+predictions <- model_comp2 %>% predict(test_1_mice[-c(1,3,5,10,16)]) 
+
+# Model accuracy 
+mean(predictions$class==test_1_mice$Attrition_Flag) 
+
+# Matrice de confusion
+table(predictions$class,test_1_mice$Attrition_Flag)
+
+```
+
+
+### Régression Logistique
+
+```{r}
+model_logit_comp2<-glm(Attrition_Flag~. , data = train.data_mice[-c(1,3,5,10,16)],family = binomial)
+
+# Résultats modèle
+summary(model_logit_comp2)
+
+# Prédiction
+prob <- model_logit_comp2 %>% predict(test_1_mice[-c(1,3,5,10,16)] , type = "response") 
+predicted.class<- ifelse(prob>0.5, "Existing Customer","Attrited Customer")
+
+# Model accuracy 
+mean(predicted.class==test_1_mice$Attrition_Flag) 
+
+# Matrice de confusion
+table(predicted.class,test_1_mice$Attrition_Flag)
+
+
+```
+
+
+# Arbre de Décision
+
+## Arbre sur les données complètes
+
+```{r}
+library(ISLR2)
+library(tree)
+set.seed(123)
+train<- sample(1:nrow(Dataset[complete.cases(Dataset),]), 0.75*nrow(Dataset[complete.cases(Dataset),]))
+test_complet<- Dataset[complete.cases(Dataset),][-train,]
+tree.train <- tree( Attrition_Flag ~ . , data = Dataset , subset = train)
+tree.pred <- predict(tree.train, test_complet,type = "class")
+table(tree.pred, test_complet$Attrition_Flag)
+plot(tree.train)
+# Affichage de l'arbre avec les attributs des variables 
+text(tree.train, pretty = 0)
+summary(tree.train)
+
+# Elagage de l'arbre
+### Elagage de l'arbre.
+set.seed(7)
+crosval.tree <- cv.tree(tree.train, FUN = prune.misclass)
+names(crosval.tree)
+crosval.tree
+# Affichage des graphique
+par(mfrow = c(1, 2))
+plot(crosval.tree$size, crosval.tree$dev, type = "b")
+plot(crosval.tree$k, crosval.tree$dev, type = "b")
+#### le 6 indique le nombre de feuilles finales
+prune_tree <- prune.misclass(tree.train, best = 6) 
+plot(prune_tree)
+# Affichage du meilleur arbre aprés élagage
+text(prune_tree, pretty = 0)
+### Calcul de performance de l'arbre
+tree.pred <- predict(prune_tree, test_complet,
+                     type = "class")
+table(tree.pred, test_complet$Attrition_Flag)
+(151 + 1464) / 1771
+###
+
+
+
+```
+
+## Arbre sur les données imputées par le mode
+
+```{r}
+train.data1<- sample(1:nrow(Dataset), 0.75*nrow(Dataset))
+train.data1<- Dataset[][train,]
+test_1<- Dataset[][-train,]
+# Imputation des bases d'entrainement et test par le mode
+Mode = function(x){
+  ux <-na.omit(unique(x))
+  tab<- tabulate(match(x,ux)) ; ux[tab == max(tab)]
+}
+
+Mode(train.data1$Education_Level)
+Mode(train.data1$Marital_Status)
+Mode(train.data1$Income_Category)
+# Imputation dans la base de données entrainement
+train.data1$Education_Level[is.na(train.data1$Education_Level)]<-Mode(train.data1$Education_Level)
+train.data1$Marital_Status[is.na(train.data1$Marital_Status)]<-Mode(train.data1$Marital_Status)
+train.data1$Income_Category[is.na(train.data1$Income_Category)]<-Mode(train.data1$Income_Category)
+# Imputation dans la base de données test
+
+test_1$Education_Level[is.na(test_1$Education_Level)]<-Mode(test_1$Education_Level)
+test_1$Marital_Status[is.na(test_1$Marital_Status)]<-Mode(test_1$Marital_Status)
+test_1$Income_Category[is.na(test_1$Income_Category)]<-Mode(test_1$Income_Category)
+
+# ARBRE SUR LA BASE IMPUTEE
+tree.train1 <- tree( Attrition_Flag ~ . , data = train.data1)
+tree.pred1 <- predict(tree.train1, test_1,type = "class")
+table(tree.pred1, test_1$Attrition_Flag)
+text(tree.train, pretty = 0)
+# Elagage de l'arbre
+### Elagage de l'arbre.
+set.seed(7)
+crosval.tree1 <- cv.tree(tree.train1, FUN = prune.misclass)
+names(crosval.tree1)
+crosval.tree1
+# Affichage des graphique
+par(mfrow = c(1, 2))
+plot(crosval.tree1$size, crosval.tree1$dev, type = "b")
+plot(crosval.tree1$k, crosval.tree1$dev, type = "b")
+#### le 6 indique le nombre de feuilles finales
+prune_tree1<- prune.misclass(tree.train1, best = 8) 
+plot(prune_tree1)
+# Affichage du meilleur arbre aprés élagage
+text(prune_tree1, pretty = 0)
+### Calcul de performance de l'arbre
+tree.pred1<- predict(prune_tree1, test_1,
+                     type = "class")
+table(tree.pred1, test_1$Attrition_Flag)
+(473 + 3867) / 4817
+###
+
+```
+
+## Arbre sur les données imputées par la méthode mice
+
+```{r}
+# Données d'entrainement
+train.data2<- Dataset[][train,]
+test_2<- Dataset[][-train,]
+
+m1<- mice(train.data2)
+
+# Base imputée
+train.data_mice1<-complete(m1,2)
+
+# Données test
+
+m2<- mice(test_2)
+
+# Base imputée
+test_2_mice<-complete(m2,2)
+
+tree.train2 <- tree( Attrition_Flag ~ . , data = train.data_mice1)
+tree.pred2 <- predict(tree.train2, test_2_mice,type = "class")
+table(tree.pred2, test_2_mice$Attrition_Flag)
+text(tree.train2, pretty = 0)
+# Elagage de l'arbre
+### Elagage de l'arbre.
+set.seed(7)
+crosval.tree2 <- cv.tree(tree.train2, FUN = prune.misclass)
+names(crosval.tree2)
+crosval.tree2
+# Affichage des graphique
+par(mfrow = c(1, 2))
+plot(crosval.tree2$size, crosval.tree2$dev, type = "b")
+plot(crosval.tree2$k, crosval.tree2$dev, type = "b")
+#### le 6 indique le nombre de feuilles finales
+prune_tree2<- prune.misclass(tree.train2, best = 8) 
+plot(prune_tree2)
+# Affichage du meilleur arbre aprés élagage
+text(prune_tree1, pretty = 0)
+### Calcul de performance de l'arbre
+tree.pred2<- predict(prune_tree2, test_2_mice,
+                     type = "class")
+table(tree.pred2, test_2_mice$Attrition_Flag)
+(473 + 3867) / 4817
+
+```
+
+
+#modèle de Gradient Boosting pour une classification multiclasse
+##imputation par mode
+```{r}
+#modèle de Gradient Boosting pour une classification multiclasse
+
+Dataset <- read_excel("Dataset.xlsx")
+
+# Recodage des variables (Unknown en NA)
+Dataset$Education_Level<-ifelse(Dataset$Education_Level=="Unknown","",Dataset$Education_Level)
+is.na(Dataset$Education_Level)<-Dataset$Education_Level==""
+Dataset$Marital_Status<-ifelse(Dataset$Marital_Status=="Unknown","",Dataset$Marital_Status)
+is.na(Dataset$Marital_Status)<-Dataset$Marital_Status==""
+Dataset$Income_Category<-ifelse(Dataset$Income_Category=="Unknown","",Dataset$Income_Category)
+is.na(Dataset$Income_Category)<-Dataset$Income_Category==""
+
+#Definir les facteurs
+Dataset[c(2,4,6,7,8,9)] <- lapply(Dataset[c(2,4,6,7,8,9)], as.factor)
+
+#imputation des valeurs manquantes des variables qualitatives par mode
+Mode = function(x){
+  ux <-na.omit(unique(x))
+  tab<- tabulate(match(x,ux)) ; ux[tab == max(tab)]
+}
+
+Dataset$Education_Level[is.na(Dataset$Education_Level)]<-Mode(Dataset$Education_Level)
+Dataset$Marital_Status[is.na(Dataset$Marital_Status)]<-Mode(Dataset$Marital_Status)
+Dataset$Income_Category[is.na(Dataset$Income_Category)]<-Mode(Dataset$Income_Category)
+
+#imputation des valeurs manquantes des variables quantitatives par moyenne
+Dataset$Customer_Age[is.na(Dataset$Customer_Age)] <- mean(Dataset$Customer_Age)
+Dataset$Dependent_count[is.na(Dataset$Dependent_count)]  <- mean(Dataset$Dependent_count)
+Dataset$Months_on_book[is.na(Dataset$Months_on_book)] <- mean(Dataset$Months_on_book)
+
+Dataset$Total_Relationship_Count[is.na(Dataset$Total_Relationship_Count)] <- mean(Dataset$Total_Relationship_Count)
+Dataset$Months_Inactive_12_mon[is.na(Dataset$Months_Inactive_12_mon)]  <- mean(Dataset$Months_Inactive_12_mon)
+Dataset$Contacts_Count_12_mon[is.na(Dataset$Contacts_Count_12_mon)] <- mean(Dataset$Contacts_Count_12_mon)
+
+Dataset$Credit_Limit[is.na(Dataset$Credit_Limit)] <- mean(Dataset$Credit_Limit)
+Dataset$Total_Revolving_Bal[is.na(Dataset$Total_Revolving_Bal)] <- mean(Dataset$Total_Revolving_Bal)
+Dataset$Avg_Open_To_Buy[is.na(Dataset$Avg_Open_To_Buy)]  <- mean(Dataset$Avg_Open_To_Buy)
+Dataset$Total_Amt_Chng_Q4_Q1[is.na(Dataset$Total_Amt_Chng_Q4_Q1)] <- mean(Dataset$Total_Amt_Chng_Q4_Q1)
+
+
+Dataset$Avg_Utilization_Ratio[is.na(Dataset$Avg_Utilization_Ratio)] <- mean(Dataset$Avg_Utilization_Ratio)
+
+
+#Transformation des variables categorielles en dummy variables
+Dataset$Gender_R <- ifelse(Dataset$Gender =="M", yes=1, no=0) 
+Dataset$Uneducated <- ifelse(test = Dataset$Education_Level == "Uneducated", yes=1, no=0) #
+Dataset$College<- ifelse(test =  Dataset$Education_Level == "College", yes=1, no=0)
+Dataset$High_School <- ifelse(test = Dataset$Education_Level == "High School", yes=1, no=0)
+Dataset$Graduate <- ifelse(test = Dataset$Education_Level == "Graduate", yes=1, no=0)
+Dataset$Post_Graduate <- ifelse(test = Dataset$Education_Level == "Post-Graduate", yes=1, no=0)
+Dataset$Uneducated <- ifelse(test = Dataset$Education_Level == "Uneducated", yes=1, no=0) #
+
+Dataset$Single <- ifelse(test = Dataset$Marital_Status == "Single", yes=1, no=0) #
+Dataset$Married <- ifelse(test = Dataset$Marital_Status == "Married", yes=1, no=0) #
+Dataset$Divorced <- ifelse(test = Dataset$Marital_Status == "Divorced", yes=1, no=0) #
+
+
+Dataset$Card_Category <- ifelse(test = Dataset$Income_Category == "Blue", yes=1, no=0) #
+Dataset$Income_40K_60K <- ifelse(test = Dataset$Income_Category == "$40K - $60K", yes=1, no=0) #
+Dataset$Income_60K_80k <- ifelse(test = Dataset$Income_Category == "$60K - $80K", yes=1, no=0) #
+Dataset$Income_80K_120K <- ifelse(test = Dataset$Income_Category == "$80K - $120K", yes=1, no=0) #
+Dataset$Income_Less_than_40k <- ifelse(test = Dataset$Income_Category == "Less than $40K", yes=1, no=0) 
+
+Dataset$card_Blue <- ifelse(test = Dataset$Card_Category == "Blue", yes=1, no=0) #
+Dataset$card_Gold <- ifelse(test = Dataset$Card_Category == "Gold", yes=1, no=0) #
+Dataset$card_Platinum <- ifelse(test = Dataset$Card_Category == "Platinum", yes=1, no=0) #
+Dataset$card_Silver <- ifelse(test = Dataset$Card_Category == "Silver", yes=1, no=0) #
+
+#transformee la variable cible en categorielle
+Dataset$Attrition_Flag<- ifelse(Dataset$Attrition_Flag =="Attrited Customer", yes=1, no=0) 
+
+
+#Base recodiée en quantitative
+Dataset2 <- Dataset[, c(2,3,5, 9:38)]
+
+test = 
+train.data <- Dataset2[training.individuals, ] 
+train.data_2<- data.frame(train.data)
+test.data <- Dataset[-training.individuals, ]
+test.data_2<- data.frame(test.data)
+
+train_data <- train.data_2
+test_data <- test.data_2
+
+# Charger la bibliothèque xgboost
+#install.packages("xgboost")
+library(xgboost)
+
+# Diviser les données en ensemble d'entraînement et ensemble de test
+set.seed(123)  # Pour la reproductibilité
+# Séparer les variables prédictives (X) et la variable cible (Y) dans les ensembles d'entraînement et de test
+training.individuals <- Dataset2$Attrition_Flag %>% 
+			createDataPartition(p = 0.75, list = FALSE) 
+train.data <- Dataset2[training.individuals, ] 
+train.data_2<- data.frame(train.data)
+test.data <- Dataset2[-training.individuals, ]
+test.data_2<- data.frame(test.data)
+
+X_train <- train.data[, -1]  # Sélectionner toutes les colonnes sauf la colonne cible
+Y_train <- train.data[, 1]  # Sélectionner la colonne cible
+X_test <- test.data[, -1]
+Y_test <- test.data[, 1]
+
+##########
+library(caret)
+gb_train = xgb.DMatrix(data = as.matrix(X_train), label = Y_train$Attrition_Flag )
+gb_valid = xgb.DMatrix(data = as.matrix(X_test), label = Y_test$Attrition_Flag )
+
+watchlist = list(train = gb_train, valid = gb_valid)
+
+
+max.depths = c(1, 2, 5 , 6, 7, 8 ,9, 10)
+etas = c(0.01, 0.02, 0.03, 0.5, 0.6, 1)
+nthreads=c(1, 2, 3, 4)
+
+best_params = 0
+best_score = 0
+
+count = 1
+for( nt in nthreads ){
+for( depth in max.depths ){
+    for( num in etas){
+
+        bst_grid = xgb.train(data = gb_train, 
+                                max.depth = depth, 
+                                eta=num, 
+                                nthread = nt,
+                             nround = 100, 
+                                watchlist = watchlist, 
+                                objective = "binary:logistic", 
+                                early_stopping_rounds = 50, 
+                                verbose=0)
+
+        if(count == 1){
+            best_params = bst_grid$params
+            best_score = bst_grid$best_score
+            count = count + 1
+            }
+        else if( bst_grid$best_score < best_score){
+            best_params = bst_grid$params
+            best_score = bst_grid$best_score
+        }
+    }
+}
+}
+
+best_params
+best_score                            
+
+#on trouve le meilleur eta=0.6, nthread=1, max.depth=2,
+
+#Modele avec les meilleurs parametres
+bst_slow = xgb.train(data= gb_train, 
+                        max.depth = best_params$max_depth, 
+                        eta = best_params$eta, 
+                        nthread = best_params$nthread, 
+                        nround = 100, 
+                        watchlist = watchlist, 
+                        objective = "binary:logistic", 
+                        early_stopping_rounds = 50,
+                        print_every_n = 500)
+
+dtest = xgb.DMatrix(data =  as.matrix(X_test))
+y_hat_valid = predict(bst_slow, dtest)
+
+y_pred <- ifelse(y_hat_valid > 0.5, 1, 0)
+
+# Calculer la matrice de confusion
+confusion_matrix <- table(Prediction = y_pred, Reel = Y_test$Attrition_Flag)
+
+# Afficher la matrice de confusion
+print(confusion_matrix)
+
+# Calculer la sensibilité (rappel)
+sensibilite <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+
+# Calculer la spécificité
+specificite <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+
+# Calculer la précision (accuracy)
+precision <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+
+# Afficher les résultats
+print(paste("Sensibilité (Rappel) :", sensibilite))
+print(paste("Spécificité :", specificite))
+print(paste("Précision (Accuracy) :", precision))
+
+```
+
+#cas complet
+```{r}
+#modèle de Gradient Boosting pour une classification multiclasse
+#importation de la base
+Dataset <- read_excel("Dataset.xlsx")
+
+# Recodage des variables (Unknown en NA)
+Dataset$Education_Level<-ifelse(Dataset$Education_Level=="Unknown","",Dataset$Education_Level)
+is.na(Dataset$Education_Level)<-Dataset$Education_Level==""
+Dataset$Marital_Status<-ifelse(Dataset$Marital_Status=="Unknown","",Dataset$Marital_Status)
+is.na(Dataset$Marital_Status)<-Dataset$Marital_Status==""
+Dataset$Income_Category<-ifelse(Dataset$Income_Category=="Unknown","",Dataset$Income_Category)
+is.na(Dataset$Income_Category)<-Dataset$Income_Category==""
+
+#Transformation des variables categorielles en dummy variables
+Dataset$Gender_R <- ifelse(Dataset$Gender =="M", yes=1, no=0) 
+Dataset$Uneducated <- ifelse(test = Dataset$Education_Level == "Uneducated", yes=1, no=0) #
+Dataset$College<- ifelse(test =  Dataset$Education_Level == "College", yes=1, no=0)
+Dataset$High_School <- ifelse(test = Dataset$Education_Level == "High School", yes=1, no=0)
+Dataset$Graduate <- ifelse(test = Dataset$Education_Level == "Graduate", yes=1, no=0)
+Dataset$Post_Graduate <- ifelse(test = Dataset$Education_Level == "Post-Graduate", yes=1, no=0)
+Dataset$Uneducated <- ifelse(test = Dataset$Education_Level == "Uneducated", yes=1, no=0) #
+
+Dataset$Single <- ifelse(test = Dataset$Marital_Status == "Single", yes=1, no=0) #
+Dataset$Married <- ifelse(test = Dataset$Marital_Status == "Married", yes=1, no=0) #
+Dataset$Divorced <- ifelse(test = Dataset$Marital_Status == "Divorced", yes=1, no=0) #
+
+
+Dataset$Card_Category <- ifelse(test = Dataset$Income_Category == "Blue", yes=1, no=0) #
+Dataset$Income_40K_60K <- ifelse(test = Dataset$Income_Category == "$40K - $60K", yes=1, no=0) #
+Dataset$Income_60K_80k <- ifelse(test = Dataset$Income_Category == "$60K - $80K", yes=1, no=0) #
+Dataset$Income_80K_120K <- ifelse(test = Dataset$Income_Category == "$80K - $120K", yes=1, no=0) #
+Dataset$Income_Less_than_40k <- ifelse(test = Dataset$Income_Category == "Less than $40K", yes=1, no=0) 
+
+Dataset$card_Blue <- ifelse(test = Dataset$Card_Category == "Blue", yes=1, no=0) #
+Dataset$card_Gold <- ifelse(test = Dataset$Card_Category == "Gold", yes=1, no=0) #
+Dataset$card_Platinum <- ifelse(test = Dataset$Card_Category == "Platinum", yes=1, no=0) #
+Dataset$card_Silver <- ifelse(test = Dataset$Card_Category == "Silver", yes=1, no=0) #
+
+#transformee la variable cible en categorielle
+Dataset$Attrition_Flag<- ifelse(Dataset$Attrition_Flag =="Attrited Customer", yes=1, no=0) 
+
+
+#Base recodiée en quantitative
+Dataset2 <- Dataset[, c(2,3,5, 9:38)]
+
+
+# cas complet
+Dataset2<-na.omit(Dataset2)
+
+test = 
+train.data <- Dataset2[training.individuals, ] 
+train.data_2<- data.frame(train.data)
+test.data <- Dataset[-training.individuals, ]
+test.data_2<- data.frame(test.data)
+
+train_data <- train.data_2
+test_data <- test.data_2
+
+# Charger la bibliothèque xgboost
+#install.packages("xgboost")
+#library(xgboost)
+
+# Diviser les données en ensemble d'entraînement et ensemble de test
+set.seed(123)  # Pour la reproductibilité
+# Séparer les variables prédictives (X) et la variable cible (Y) dans les ensembles d'entraînement et de test
+training.individuals <- Dataset2$Attrition_Flag %>% 
+			createDataPartition(p = 0.75, list = FALSE) 
+train.data <- Dataset2[training.individuals, ] 
+train.data_2<- data.frame(train.data)
+test.data <- Dataset2[-training.individuals, ]
+test.data_2<- data.frame(test.data)
+
+X_train <- train.data[, -1]  # Sélectionner toutes les colonnes sauf la colonne cible
+Y_train <- train.data[, 1]  # Sélectionner la colonne cible
+X_test <- test.data[, -1]
+Y_test <- test.data[, 1]
+
+```
+
+
+```{r}
+library(caret)
+gb_train = xgb.DMatrix(data = as.matrix(X_train), label = Y_train$Attrition_Flag )
+gb_valid = xgb.DMatrix(data = as.matrix(X_test), label = Y_test$Attrition_Flag )
+
+watchlist = list(train = gb_train, valid = gb_valid)
+
+
+max.depths = c(1, 2, 5 , 6, 7, 8 ,9, 10)
+etas = c(0.01, 0.02, 0.03, 0.5, 0.6, 1)
+nthreads=c(1, 2, 3, 4)
+
+best_params = 0
+best_score = 0
+
+count = 1
+for( nt in nthreads ){
+for( depth in max.depths ){
+    for( num in etas){
+
+        bst_grid = xgb.train(data = gb_train, 
+                                max.depth = depth, 
+                                eta=num, 
+                                nthread = nt,
+                             nround = 100, 
+                                watchlist = watchlist, 
+                                objective = "binary:logistic", 
+                                early_stopping_rounds = 50, 
+                                verbose=0)
+
+        if(count == 1){
+            best_params = bst_grid$params
+            best_score = bst_grid$best_score
+            count = count + 1
+            }
+        else if( bst_grid$best_score < best_score){
+            best_params = bst_grid$params
+            best_score = bst_grid$best_score
+        }
+    }
+}
+}
+
+best_params
+best_score                            
+
+#on trouve le meilleur eta=0.6, nthread=1, max.depth=2,
+
+#Modele avec les meilleurs parametres
+bst_slow = xgb.train(data= gb_train, 
+                        max.depth = best_params$max_depth, 
+                        eta = best_params$eta, 
+                        nthread = best_params$nthread, 
+                        nround = 100, 
+                        watchlist = watchlist, 
+                        objective = "binary:logistic", 
+                        early_stopping_rounds = 50,
+                        print_every_n = 500)
+
+dtest = xgb.DMatrix(data =  as.matrix(X_test))
+y_hat_valid = predict(bst_slow, dtest)
+
+y_pred <- ifelse(y_hat_valid > 0.5, 1, 0)
+
+# Calculer la matrice de confusion
+confusion_matrix <- table(Prediction = y_pred, Reel = Y_test$Attrition_Flag)
+
+# Afficher la matrice de confusion
+print(confusion_matrix)
+
+# Calculer la sensibilité (rappel)
+sensibilite <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+
+# Calculer la spécificité
+specificite <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+
+# Calculer la précision (accuracy)
+precision <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+
+# Afficher les résultats
+print(paste("Sensibilité (Rappel) :", sensibilite))
+print(paste("Spécificité :", specificite))
+print(paste("Précision (Accuracy) :", precision))
+
+```
+
+##imputation par mice
+```{r}
+#modèle de Gradient Boosting pour une classification multiclasse
+#importation de la base
+Dataset <- read_excel("Dataset.xlsx")
+
+# Recodage des variables (Unknown en NA)
+Dataset$Education_Level<-ifelse(Dataset$Education_Level=="Unknown","",Dataset$Education_Level)
+is.na(Dataset$Education_Level)<-Dataset$Education_Level==""
+Dataset$Marital_Status<-ifelse(Dataset$Marital_Status=="Unknown","",Dataset$Marital_Status)
+is.na(Dataset$Marital_Status)<-Dataset$Marital_Status==""
+Dataset$Income_Category<-ifelse(Dataset$Income_Category=="Unknown","",Dataset$Income_Category)
+is.na(Dataset$Income_Category)<-Dataset$Income_Category==""
+
+#Transformation des variables categorielles en dummy variables
+Dataset$Gender_R <- ifelse(Dataset$Gender =="M", yes=1, no=0) 
+Dataset$Uneducated <- ifelse(test = Dataset$Education_Level == "Uneducated", yes=1, no=0) #
+Dataset$College<- ifelse(test =  Dataset$Education_Level == "College", yes=1, no=0)
+Dataset$High_School <- ifelse(test = Dataset$Education_Level == "High School", yes=1, no=0)
+Dataset$Graduate <- ifelse(test = Dataset$Education_Level == "Graduate", yes=1, no=0)
+Dataset$Post_Graduate <- ifelse(test = Dataset$Education_Level == "Post-Graduate", yes=1, no=0)
+Dataset$Uneducated <- ifelse(test = Dataset$Education_Level == "Uneducated", yes=1, no=0) #
+
+Dataset$Single <- ifelse(test = Dataset$Marital_Status == "Single", yes=1, no=0) #
+Dataset$Married <- ifelse(test = Dataset$Marital_Status == "Married", yes=1, no=0) #
+Dataset$Divorced <- ifelse(test = Dataset$Marital_Status == "Divorced", yes=1, no=0) #
+
+
+Dataset$Card_Category <- ifelse(test = Dataset$Income_Category == "Blue", yes=1, no=0) #
+Dataset$Income_40K_60K <- ifelse(test = Dataset$Income_Category == "$40K - $60K", yes=1, no=0) #
+Dataset$Income_60K_80k <- ifelse(test = Dataset$Income_Category == "$60K - $80K", yes=1, no=0) #
+Dataset$Income_80K_120K <- ifelse(test = Dataset$Income_Category == "$80K - $120K", yes=1, no=0) #
+Dataset$Income_Less_than_40k <- ifelse(test = Dataset$Income_Category == "Less than $40K", yes=1, no=0) 
+
+Dataset$card_Blue <- ifelse(test = Dataset$Card_Category == "Blue", yes=1, no=0) #
+Dataset$card_Gold <- ifelse(test = Dataset$Card_Category == "Gold", yes=1, no=0) #
+Dataset$card_Platinum <- ifelse(test = Dataset$Card_Category == "Platinum", yes=1, no=0) #
+Dataset$card_Silver <- ifelse(test = Dataset$Card_Category == "Silver", yes=1, no=0) #
+
+#transformee la variable cible en categorielle
+Dataset$Attrition_Flag<- ifelse(Dataset$Attrition_Flag =="Attrited Customer", yes=1, no=0) 
+
+
+#Base recodiée en quantitative
+Dataset2 <- Dataset[, c(2,3,5, 9:38)]
+
+
+# Base imputée par mise
+m1<- mice(Dataset2)
+Dataset2<-complete(m1,2)
+
+test = 
+train.data <- Dataset2[training.individuals, ] 
+train.data_2<- data.frame(train.data)
+test.data <- Dataset[-training.individuals, ]
+test.data_2<- data.frame(test.data)
+
+train_data <- train.data_2
+test_data <- test.data_2
+
+# Charger la bibliothèque xgboost
+#install.packages("xgboost")
+#library(xgboost)
+
+# Diviser les données en ensemble d'entraînement et ensemble de test
+set.seed(123)  # Pour la reproductibilité
+# Séparer les variables prédictives (X) et la variable cible (Y) dans les ensembles d'entraînement et de test
+training.individuals <- Dataset2$Attrition_Flag %>% 
+			createDataPartition(p = 0.75, list = FALSE) 
+train.data <- Dataset2[training.individuals, ] 
+train.data_2<- data.frame(train.data)
+test.data <- Dataset2[-training.individuals, ]
+test.data_2<- data.frame(test.data)
+
+X_train <- train.data[, -1]  # Sélectionner toutes les colonnes sauf la colonne cible
+Y_train <- train.data[, 1]  # Sélectionner la colonne cible
+X_test <- test.data[, -1]
+Y_test <- test.data[, 1]
+
+#verifs
+#Y_train <-data.frame(Y_train)
+```
+
+```{r}
+library(caret)
+gb_train = xgb.DMatrix(data = as.matrix(X_train), label = Y_train )
+gb_valid = xgb.DMatrix(data = as.matrix(X_test), label = Y_test )
+
+watchlist = list(train = gb_train, valid = gb_valid)
+
+
+max.depths = c(1, 2, 5 , 6, 7, 8 ,9, 10)
+etas = c(0.01, 0.02, 0.03, 0.5, 0.6, 1)
+nthreads=c(1, 2, 3, 4)
+
+best_params = 0
+best_score = 0
+
+count = 1
+for( nt in nthreads ){
+for( depth in max.depths ){
+    for( num in etas){
+
+        bst_grid = xgb.train(data = gb_train, 
+                                max.depth = depth, 
+                                eta=num, 
+                                nthread = nt,
+                             nround = 100, 
+                                watchlist = watchlist, 
+                                objective = "binary:logistic", 
+                                early_stopping_rounds = 50, 
+                                verbose=0)
+
+        if(count == 1){
+            best_params = bst_grid$params
+            best_score = bst_grid$best_score
+            count = count + 1
+            }
+        else if( bst_grid$best_score < best_score){
+            best_params = bst_grid$params
+            best_score = bst_grid$best_score
+        }
+    }
+}
+}
+
+best_params
+best_score                            
+
+#on trouve le meilleur eta=0.6, nthread=1, max.depth=2,
+
+#Modele avec les meilleurs parametres
+bst_slow = xgb.train(data= gb_train, 
+                        max.depth = best_params$max_depth, 
+                        eta = best_params$eta, 
+                        nthread = best_params$nthread, 
+                        nround = 100, 
+                        watchlist = watchlist, 
+                        objective = "binary:logistic", 
+                        early_stopping_rounds = 50,
+                        print_every_n = 500)
+
+dtest = xgb.DMatrix(data =  as.matrix(X_test))
+y_hat_valid = predict(bst_slow, dtest)
+
+y_pred <- ifelse(y_hat_valid > 0.5, 1, 0)
+
+# Calculer la matrice de confusion
+confusion_matrix <- table(Prédiction = y_pred, Réel = Y_test)
+
+# Afficher la matrice de confusion
+print(confusion_matrix)
+
+# Calculer la sensibilité (rappel)
+sensibilite <- confusion_matrix[2, 2] / sum(confusion_matrix[2, ])
+
+# Calculer la spécificité
+specificite <- confusion_matrix[1, 1] / sum(confusion_matrix[1, ])
+
+# Calculer la précision (accuracy)
+precision <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+
+# Afficher les résultats
+print(paste("Sensibilité (Rappel) :", sensibilite))
+print(paste("Spécificité :", specificite))
+print(paste("Précision (Accuracy) :", precision))
+
+```
